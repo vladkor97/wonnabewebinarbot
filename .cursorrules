@@ -1,0 +1,320 @@
+**1.1. Цель:** Разработать Telegram-бота, предоставляющего пользователям интерфейс для общения с Large Language Model (LLM). Бот должен поддерживать контекст диалога для обеспечения связного общения.
+
+**1.2. Основные функции:**
+*   Приветствие пользователя по команде `/start`.
+*   Прием текстовых сообщений от пользователя.
+*   Передача сообщений пользователя и истории диалога в LLM через API-провайдера OpenRouter.
+*   Отображение ответа LLM пользователю.
+*   Поддержание контекста диалога, ограниченного последними 20 сообщениями (вопрос-ответ).
+
+#### **2. Используемые технологии и сервисы**
+
+*   **Язык программирования:** Python 3.8+
+*   **Основная библиотека для Telegram:** `python-telegram-bot`
+*   **Вспомогательные библиотеки:** `python-dotenv` (для управления секретными ключами), `requests` (для взаимодействия с API).
+*   **API Telegram:** Telegram Bot API.
+*   **Провайдер LLM:** OpenRouter.
+*   **Модель LLM:** **`google/gemini-2.5-flash`**. Использование любой другой модели считается несоответствием данному ТЗ.
+
+---
+
+### **3. Поэтапный план разработки**
+
+Проект будет реализован в три последовательных этапа. После завершения каждого этапа проводится проверка его работоспособности согласно критериям приемки.
+
+---
+
+#### **Этап 1: Подготовка окружения и настройка проекта**
+
+**Цель этапа:** Создать и сконфигурировать рабочее пространство проекта, получить все необходимые доступы и установить зависимости.
+
+**Задачи:**
+
+1.  **Получить токен Telegram-бота** через `@BotFather` в Telegram.
+2.  **Получить API-ключ OpenRouter**, зарегистрировавшись на сайте `openrouter.ai`.
+3.  **Создать и настроить локальное окружение:**
+    *   Создайте папку для проекта (например, `telegram_bot`) и перейдите в нее.
+    *   Создайте виртуальное окружение. Это изолированная среда, которая не позволит конфликтовать зависимостям разных проектов. Выполните команду:
+        ```bash
+        python -m venv venv
+        ```
+    *   Активируйте виртуальное окружение:
+        *   **Windows:** `venv\Scripts\activate`
+        *   **macOS / Linux:** `source venv/bin/activate`
+4.  **Установить зависимости:**
+    *   Создайте в папке проекта файл `requirements.txt`. Этот файл перечисляет все библиотеки, которые нужны проекту. Добавьте в него следующий текст:
+        ```
+        python-telegram-bot==21.0.1
+        python-dotenv==1.0.1
+        requests==2.31.0
+        ```
+    *   Установите эти библиотеки, выполнив в терминале команду:
+        ```bash
+        pip install -r requirements.txt
+        ```
+5.  **Настроить безопасное хранение ключей:**
+    *   Создайте файл с именем `.env`. В нем будут храниться ваши секретные ключи, чтобы они не попали в код. Добавьте в него две строки, подставив свои реальные ключи:
+        ```
+        TELEGRAM_BOT_TOKEN="ВАШ_ТЕЛЕГРАМ_ТОКЕН"
+        OPENROUTER_API_KEY="ВАШ_OPENROUTER_КЛЮЧ"
+        ```
+    *   Создайте файл `.gitignore`. Он нужен, чтобы случайно не выложить ваши секреты и временные файлы в систему контроля версий (например, на GitHub). Добавьте в него:
+        ```
+        .env
+        venv/
+        __pycache__/
+        *.pyc
+        ```
+
+**Критерии приемки этапа:**
+*   Токен Telegram и ключ OpenRouter получены и сохранены в `.env`.
+*   Виртуальное окружение создано и активировано, зависимости из `requirements.txt` установлены.
+*   Файл `.gitignore` корректно настроен.
+
+---
+
+#### **Этап 2: Реализация команды `/start` и базовый запуск бота**
+
+**Цель этапа:** Запустить "скелет" бота, который умеет реагировать на команду `/start`, подтверждая свою работоспособность.
+
+**Задачи:**
+
+1.  **Создать основной файл приложения `main.py`** и добавить в него следующий код:
+
+    ```python
+    import logging
+    import os
+    from dotenv import load_dotenv
+    from telegram import Update
+    from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+    # Загружаем переменные окружения из файла .env
+    load_dotenv()
+
+    # Настраиваем логирование для отладки
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO
+    )
+    logger = logging.getLogger(__name__)
+
+    # Асинхронная функция-обработчик команды /start
+    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Отправляет приветственное сообщение при команде /start."""
+        welcome_message = (
+            "Привет! Я бот, подключенный к Large Language Model через OpenRouter. "
+            "Отправь мне любое сообщение, чтобы начать общение."
+        )
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=welcome_message
+        )
+
+    def main():
+        """Основная функция для запуска бота."""
+        # Считываем токен Telegram из переменных окружения
+        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if not telegram_token:
+            logger.error("TELEGRAM_BOT_TOKEN не найден в .env файле.")
+            return
+
+        # Инициализируем приложение
+        application = ApplicationBuilder().token(telegram_token).build()
+
+        # Регистрируем обработчик для команды /start
+        start_handler = CommandHandler('start', start)
+        application.add_handler(start_handler)
+
+        # Запускаем бота в режиме polling (постоянный опрос)
+        logger.info("Бот запускается...")
+        application.run_polling()
+
+    if __name__ == '__main__':
+        main()
+    ```
+
+2.  **Запустить бота** командой `python main.py` и проверить его работу в Telegram.
+
+**Критерии приемки этапа:**
+*   Скрипт `main.py` запускается из консоли без ошибок.
+*   При отправке боту команды `/start` в Telegram, он отвечает заданным приветственным сообщением.
+*   Бот не реагирует на любые другие текстовые сообщения.
+*   Бот продолжает работать после отправки ответа.
+
+---
+
+#### **Этап 3: Интеграция с LLM и обработка текстовых сообщений**
+
+**Цель этапа:** Реализовать основную бизнес-логику: обработку сообщений пользователя, взаимодействие с LLM OpenRouter с сохранением контекста и отправку ответа.
+
+**Задачи:**
+
+1.  **Создать файл `system_prompt.json`** с системным промптом (инструкцией для модели). Добавьте в него следующий текст:
+    ```json
+    {
+      "role": "system",
+      "content": "You are a helpful assistant."
+    }
+    ```
+2.  **Дополнить `main.py`** для обработки сообщений, общения с LLM и хранения истории диалога. Замените код в `main.py` на следующий:
+
+    ```python
+    import logging
+    import os
+    import json
+    import requests # Импортируем синхронную библиотеку для HTTP-запросов
+    from dotenv import load_dotenv
+    from telegram import Update
+    from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+
+    # --- НАСТРОЙКА И ИНИЦИАЛИЗАЦИЯ ---
+
+    load_dotenv()
+
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO
+    )
+    logger = logging.getLogger(__name__)
+
+    # Глобальный словарь для хранения историй чатов {chat_id: [messages]}
+    chat_histories = {}
+
+    def load_system_prompt() -> dict | None:
+        """Загружает системный промпт из файла system_prompt.json."""
+        try:
+            with open("system_prompt.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"Ошибка загрузки системного промпта: {e}")
+            return None
+
+    SYSTEM_PROMPT = load_system_prompt() # Загружаем промпт при старте
+
+    # --- ВЗАИМОДЕЙСТВИЕ С API LLM ---
+
+    def get_llm_response(api_key: str, history: list) -> str | None:
+        """
+        Отправляет синхронный запрос к API OpenRouter и возвращает ответ модели.
+        ВНИМАНИЕ: Этот запрос блокирует основной поток, пока не будет получен ответ.
+        Для высоконагруженных ботов лучше использовать асинхронные библиотеки (например, httpx).
+        """
+        try:
+            response = requests.post(
+                url="https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "google/gemini-2.5-flash",
+                    "messages": history,
+                }
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data['choices'][0]['message']['content']
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Ошибка API OpenRouter: {e}")
+            return None
+
+    # --- ОБРАБОТЧИКИ TELEGRAM ---
+
+    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Отправляет приветственное сообщение."""
+        welcome_message = (
+            "Привет! Я бот, подключенный к Large Language Model через OpenRouter. "
+            "Отправь мне любое сообщение, чтобы начать общение."
+        )
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=welcome_message
+        )
+
+    async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обрабатывает текстовые сообщения пользователя."""
+        chat_id = update.effective_chat.id
+        user_message = update.message.text
+
+        # 1. Получаем или инициализируем историю для данного чата
+        history = chat_histories.get(chat_id)
+        if history is None:
+            history = []
+            if SYSTEM_PROMPT:
+                history.append(SYSTEM_PROMPT)
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="Критическая ошибка: Системный промпт не загружен."
+                )
+                return
+        
+        # 2. Добавляем сообщение пользователя в историю
+        history.append({"role": "user", "content": user_message})
+
+        # 3. Получаем API ключ
+        openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        if not openrouter_api_key:
+            logger.error("OPENROUTER_API_KEY не найден.")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="Ошибка: Ключ API для OpenRouter не настроен."
+            )
+            return
+
+        # 4. Получаем ответ от LLM
+        # Запускаем синхронную функцию в асинхронном контексте
+        llm_response = await context.application.create_task(
+            get_llm_response, openrouter_api_key, history
+        )
+
+        # 5. Обрабатываем ответ
+        if llm_response:
+            history.append({"role": "assistant", "content": llm_response})
+            # Ограничиваем контекст до 20 последних сообщений
+            if len(history) > 20:
+                # Сохраняем системный промпт + 19 последних сообщений
+                history = [history[0]] + history[-19:]
+            
+            chat_histories[chat_id] = history
+            await context.bot.send_message(chat_id=chat_id, text=llm_response)
+        else:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="Извините, произошла ошибка при обращении к модели."
+            )
+
+    # --- ЗАПУСК БОТА ---
+
+    def main():
+        """Основная функция для запуска бота."""
+        if not SYSTEM_PROMPT:
+            logger.critical("Не удалось загрузить системный промпт. Запуск бота отменен.")
+            return
+
+        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if not telegram_token:
+            logger.critical("TELEGRAM_BOT_TOKEN не найден. Запуск бота отменен.")
+            return
+
+        application = ApplicationBuilder().token(telegram_token).build()
+
+        # Регистрируем обработчики
+        application.add_handler(CommandHandler('start', start))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        
+        logger.info("Бот запускается...")
+        application.run_polling()
+
+    if __name__ == '__main__':
+        main()
+    ```
+3.  **Перезапустить бота** (`python main.py`) и проверить полную функциональность.
+
+**Критерии приемки этапа:**
+*   Бот корректно отвечает на текстовые сообщения, используя ответы, сгенерированные моделью **`google/gemini-2.5-flash`**.
+*   **Контекст диалога сохраняется:** Бот способен отвечать на уточняющие вопросы, ссылаясь на предыдущие реплики в диалоге.
+*   **Контекст ограничен:** История диалога не растет бесконечно, а обрезается до 20 последних сообщений, всегда сохраняя при этом системный промпт.
+*   Бот корректно обрабатывает диалоги с разными пользователями, не смешивая их контексты.
+*   Бот не прекращает работу при ошибках API и информирует пользователя о проблеме.
+
